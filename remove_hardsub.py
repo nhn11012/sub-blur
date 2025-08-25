@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Hard-Sub / Logo Remover GUI (Auto + Manual, fixed tooltips)
+Hard-Sub / Logo Remover GUI (Blur)
 - Preview video, Play/Pause, seek.
-- Vẽ NHIỀU vùng thủ công (click-kéo trái). Right-click để xóa vùng dưới con trỏ. Clear để xóa tất cả.
-- Preset TỰ ĐỘNG (Bottom band / Full frame) với sampling + voting + bắt màu vàng/lam.
-- Union mask = auto OR manual.
-- Inpaint cv2 (Telea/NS), padding + dilate cho mask.
+- Vẽ nhiều vùng thủ công (click-kéo trái). Right-click để xóa vùng dưới con trỏ. Clear để xóa tất cả.
+- Tự động tìm văn bản trong các vùng đã chọn và làm mờ bằng Gaussian blur.
 - Ghi video:
     * Nếu có FFmpeg (PATH) và bật “Use FFmpeg” -> x264 + copy audio gốc.
     * Nếu không -> VideoWriter (mp4v, video-only).
 - Lưu cạnh file gốc: <name>_clean.mp4
-- Tooltip cho từng điều khiển (đÃ sửa, không còn dùng IntVar._root()).
+- Tooltip cho từng điều khiển (đã sửa, không còn dùng IntVar._root()).
 - Thông báo khi xong và hỏi mở thư mục.
 
 Python 3.8. Yêu cầu: opencv-python, Pillow
@@ -281,14 +279,6 @@ class App(tk.Tk):
         # Right: controls
         right = ttk.LabelFrame(mid, text="Cài đặt & Preset", padding=8)
         right.pack(side=tk.LEFT, fill=tk.Y)
-
-        # Processing method
-        ttk.Label(right, text="Processing method (thuật toán)").pack(anchor="w")
-        self.cmb_method = ttk.Combobox(right, values=["telea","ns","blur"], state="readonly", width=12)
-        self.cmb_method.set("telea"); self.cmb_method.pack(anchor="w", pady=(0,6))
-        ToolTip(self.cmb_method,
-                "telea: nhanh, mượt; ns: bảo tồn cạnh hơn nhưng chậm hơn;\n"
-                "blur: làm mờ vùng mask thay vì inpaint.")
 
         # Radius / Blur kernel
         ttk.Label(right, text="Radius / Blur kernel (bán kính)").pack(anchor="w")
@@ -589,34 +579,23 @@ class App(tk.Tk):
         self.prog.config(maximum=max(1, self.total_frames), value=0)
         self._status("Processing...")
 
-        method = self.cmb_method.get().lower()
         radius = int(self.var_radius.get())
         pad = int(self.var_pad.get())
         dilate_it = int(self.var_dilate.get())
         use_ff = bool(self.var_ffmpeg.get())
-        auto_mode = self.var_auto_mode.get()
-        auto_params = dict(
-            mode=("band" if auto_mode=="band" else ("full" if auto_mode=="full" else "off")),
-            band_ratio=float(self.var_band_ratio.get()),
-            max_samples=int(self.var_maxs.get()),
-            vote_ratio=float(self.var_vote.get()),
-            stride_seconds=float(self.var_stride.get()),
-            dilate_iter=int(self.var_auto_dilate.get()),
-            mask_vert_pad=int(self.var_mask_pad.get()),
-            detect_yellow=bool(self.var_yellow.get()),
-            detect_blue=bool(self.var_blue.get())
-        )
+        detect_yellow = bool(self.var_yellow.get())
+        detect_blue = bool(self.var_blue.get())
 
         t = threading.Thread(
             target=self._worker,
-            args=(self.video_path, out_path, self.rects[:], method, radius, pad, dilate_it, use_ff, auto_params),
+            args=(self.video_path, out_path, self.rects[:], radius, pad, dilate_it, use_ff, detect_yellow, detect_blue),
             daemon=True
         )
         t.start(); self.proc_thread = t
 
     def _worker(self, in_path: str, out_path: str, rects: List[Rect],
-                method: str, radius: int, pad_px: int, dilate_it: int, use_ffmpeg: bool,
-                auto_params: dict):
+                radius: int, pad_px: int, dilate_it: int, use_ffmpeg: bool,
+                detect_yellow: bool, detect_blue: bool):
         try:
             cap = cv2.VideoCapture(in_path)
             if not cap.isOpened():
@@ -639,36 +618,10 @@ class App(tk.Tk):
                 if not writer:
                     raise RuntimeError("Không khởi tạo VideoWriter.")
 
-            union_mask = np.zeros((H,W), dtype=np.uint8)
-
-            for r in rects:
-                x0 = max(0, r.x - pad_px); y0 = max(0, r.y - pad_px)
-                x1 = min(W, r.x+r.w + pad_px); y1 = min(H, r.y+r.h + pad_px)
-                union_mask[y0:y1, x0:x1] = 255
-            if dilate_it > 0:
-                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-                union_mask = cv2.dilate(union_mask, kernel, iterations=dilate_it)
-
-            if auto_params["mode"] in ("band","full"):
-                try:
-                    auto_mask, _ = build_auto_mask(in_path, **auto_params)
-                    union_mask = cv2.bitwise_or(union_mask, auto_mask)
-                except Exception:
-                    pass
-
-            inpaint_flag = cv2.INPAINT_TELEA if method=="telea" else cv2.INPAINT_NS
-
             processed = 0; last_upd = time.time()
             while True:
                 ok, frame = cap.read()
                 if not ok: break
-                if method == "blur":
-                    k = radius * 2 + 1
-                    blurred = cv2.GaussianBlur(frame, (k, k), 0)
-                    m3 = cv2.merge([union_mask, union_mask, union_mask])
-                    out = np.where(m3>0, blurred, frame)
-                else:
-                    out = cv2.inpaint(frame, union_mask, radius, inpaint_flag)
 
                 if isinstance(writer, cv2.VideoWriter):
                     writer.write(out)
