@@ -282,14 +282,16 @@ class App(tk.Tk):
         right = ttk.LabelFrame(mid, text="Cài đặt & Preset", padding=8)
         right.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Inpaint method
-        ttk.Label(right, text="Inpaint method (thuật toán)").pack(anchor="w")
-        self.cmb_method = ttk.Combobox(right, values=["telea","ns"], state="readonly", width=12)
+        # Processing method
+        ttk.Label(right, text="Processing method (thuật toán)").pack(anchor="w")
+        self.cmb_method = ttk.Combobox(right, values=["telea","ns","blur"], state="readonly", width=12)
         self.cmb_method.set("telea"); self.cmb_method.pack(anchor="w", pady=(0,6))
-        ToolTip(self.cmb_method, "telea: nhanh, mượt; ns: bảo tồn cạnh hơn nhưng chậm hơn.")
+        ToolTip(self.cmb_method,
+                "telea: nhanh, mượt; ns: bảo tồn cạnh hơn nhưng chậm hơn;\n"
+                "blur: làm mờ vùng mask thay vì inpaint.")
 
-        # Radius
-        ttk.Label(right, text="Inpaint radius (bán kính)").pack(anchor="w")
+        # Radius / Blur kernel
+        ttk.Label(right, text="Radius / Blur kernel (bán kính)").pack(anchor="w")
         self.var_radius = tk.IntVar(value=3)
         self.sb_radius = ttk.Spinbox(right, from_=1, to=12, textvariable=self.var_radius, width=6)
         self.sb_radius.pack(anchor="w", pady=(0,8))
@@ -660,7 +662,13 @@ class App(tk.Tk):
             while True:
                 ok, frame = cap.read()
                 if not ok: break
-                out = cv2.inpaint(frame, union_mask, radius, inpaint_flag)
+                if method == "blur":
+                    k = radius * 2 + 1
+                    blurred = cv2.GaussianBlur(frame, (k, k), 0)
+                    m3 = cv2.merge([union_mask, union_mask, union_mask])
+                    out = np.where(m3>0, blurred, frame)
+                else:
+                    out = cv2.inpaint(frame, union_mask, radius, inpaint_flag)
 
                 if isinstance(writer, cv2.VideoWriter):
                     writer.write(out)
