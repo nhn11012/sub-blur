@@ -280,9 +280,6 @@ class App(tk.Tk):
         right = ttk.LabelFrame(mid, text="Cài đặt & Preset", padding=8)
         right.pack(side=tk.LEFT, fill=tk.Y)
 
-        # Processing method fixed to blur
-        ttk.Label(right, text="Processing: Gaussian blur").pack(anchor="w", pady=(0,6))
-
         # Radius / Blur kernel
         ttk.Label(right, text="Radius / Blur kernel (bán kính)").pack(anchor="w")
         self.var_radius = tk.IntVar(value=3)
@@ -625,22 +622,6 @@ class App(tk.Tk):
             while True:
                 ok, frame = cap.read()
                 if not ok: break
-                mask = np.zeros((H, W), dtype=np.uint8)
-                for r in rects:
-                    x0 = max(0, r.x - pad_px)
-                    y0 = max(0, r.y - pad_px)
-                    w = min(W - x0, r.w + 2*pad_px)
-                    h = min(H - y0, r.h + 2*pad_px)
-                    roi = (x0, y0, w, h)
-                    m = detect_sub_pixels(frame, roi, detect_yellow=detect_yellow, detect_blue=detect_blue)
-                    mask = cv2.bitwise_or(mask, m)
-                if dilate_it > 0:
-                    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3))
-                    mask = cv2.dilate(mask, kernel, iterations=dilate_it)
-                k = radius * 2 + 1
-                blurred = cv2.GaussianBlur(frame, (k, k), 0)
-                m3 = cv2.merge([mask, mask, mask])
-                out = np.where(m3>0, blurred, frame)
 
                 if isinstance(writer, cv2.VideoWriter):
                     writer.write(out)
