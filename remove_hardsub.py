@@ -677,9 +677,9 @@ class App(tk.Tk):
             messagebox.showinfo("Folder", d)
 
     def _update_buttons(self):
-        st = tk.NORMAL if self.cap else tk.DISABLED
+        state = tk.NORMAL if self.cap else tk.DISABLED
         for w in (self.btn_play, self.btn_prev, self.btn_next, self.btn_run, self.btn_preview_auto):
-            w.config(state=st)
+            w.config(state=state)
 
     def _status(self, txt:str):
         self.var_status.set(txt)
